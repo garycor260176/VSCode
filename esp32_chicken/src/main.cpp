@@ -12,7 +12,7 @@ mqtt_ini client(
   "ESP32_CHICKEN",
    def_path);
 
-struct s_relay {
+struct s_relay { 
   String name;
   int state;
 };
@@ -82,3 +82,5 @@ void loop() {
     }
   }
 }
+
+void asd(){}
