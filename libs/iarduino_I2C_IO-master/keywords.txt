@@ -1,0 +1,22 @@
+#	####################################################
+#	СИНТАКСИЧЕСКАЯ РАСКРАСКА ДЛЯ БИБИЛИОТЕКИ:
+#	iarduino_I2C_IO
+#	####################################################
+#	ТИПЫ ДАННЫХ:							   (KEYWORD1)
+	iarduino_I2C_IO	KEYWORD1
+	iarduino_I2C_IO_Global	KEYWORD1
+#	####################################################
+#	МЕТОДЫ И ФУНКЦИИ:						   (KEYWORD2)
+	begin	KEYWORD2
+	pinMode	KEYWORD2
+	digitalRead	KEYWORD2
+	digitalWrite	KEYWORD2
+	SetModeRegister	KEYWORD2
+	SetOutputRegister	KEYWORD2
+	GetInputRegister	KEYWORD2
+#	####################################################
+#	КОНСТАНТЫ:								   (LITERAL1)
+	EXP_REG_INPUT	LITERAL1
+	EXP_REG_OUTPUT	LITERAL1
+	EXP_REG_INVERT	LITERAL1
+	EXP_REG_CONFIG	LITERAL1
