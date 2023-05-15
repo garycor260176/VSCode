@@ -82,5 +82,3 @@ void loop() {
     }
   }
 }
-
-void asd(){}
