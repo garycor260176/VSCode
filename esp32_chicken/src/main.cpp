@@ -1,12 +1,23 @@
 #include <mqtt_ini.h>
+#include "DHT.h"
+#include <Preferences.h>
+
+#include <cl_dht22.h>
 
 #define def_path "CHICKEN"
+#define def_subpath_dht22     "dht22"
 #define def_relays  3
 
 int pins[] = {
-   23,
-   5,
-   14 };
+   23, //свет
+   5, //вытяжка
+   14 //отопление
+}; 
+
+#define DHTPIN              32
+#define DHTTYPE DHT22 
+DHT dht(DHTPIN, DHTTYPE);
+cl_dht22 dht22(&dht, &client, String(def_subpath_dht22), 30000, false);
 
 mqtt_ini client( 
   "ESP32_CHICKEN",
@@ -15,9 +26,24 @@ mqtt_ini client(
 struct s_relay { 
   String name;
   int state;
+  int mode;
 };
 
-s_relay relays[def_relays];
+struct s_ini{
+  int t_on;
+  int t_off;
+  int h_on;
+  int h_off;
+};
+
+struct s_state{
+  s_relay relays[def_relays];
+  s_ini ini;
+};
+
+s_state cur_state;
+
+Preferences preferences; 
 
 String getName(int i) {
   String ret = String(i);
@@ -26,43 +52,115 @@ String getName(int i) {
   return ret;
 }
 
+void read_eeprom(s_state* state){
+  for(int i = 0; i < def_relays; i++) {
+    String t = getName(i) + "_mode";
+    state->relays[i].mode = preferences.getInt(t.c_str(), 0);
+    if(state->relays[i].mode < 0 || state->relays[i].mode > 2) state->relays[i].mode = 0;
+  }
+  
+  state->ini.t_on = preferences.getInt("t_on", 10);
+  state->ini.t_off = preferences.getInt("t_off", 20);
+
+  state->ini.h_on = preferences.getInt("h_on", 60);
+  state->ini.h_off = preferences.getInt("h_off", 40);
+}
+
+void write_eeprom(){
+  s_state readed;
+  read_eeprom(&readed);
+
+  for(int i = 0; i < def_relays; i++) {
+    if(cur_state.relays[i].mode != readed.relays[i].mode) {
+      String t = getName(i) + "_mode";
+      preferences.putInt(t.c_str(), cur_state.relays[i].mode);
+    }
+  }
+
+  if(cur_state.ini.t_on != readed.ini.t_on) {
+    preferences.putInt("t_on", cur_state.ini.t_on);
+  }
+  if(cur_state.ini.t_off != readed.ini.t_off) {
+    preferences.putInt("t_off", cur_state.ini.t_off);
+  }
+
+  if(cur_state.ini.h_on != readed.ini.h_on) {
+    preferences.putInt("h_on", cur_state.ini.h_on);
+  }
+  if(cur_state.ini.h_off != readed.ini.h_off) {
+    preferences.putInt("h_off", cur_state.ini.h_off);
+  }
+}
+
 void setup() {
   Serial.begin(115200);                                         
   Serial.println("");  Serial.println("Start!");
 
+  dht22.begin();
+
   for(int i = 0; i < def_relays; i++) {
     pinMode(pins[i], OUTPUT);
     digitalWrite(pins[i], LOW);
-    relays[i].name = getName(i);
-    relays[i].state = 0;
+    cur_state.relays[i].name = getName(i);
   }
+  read_eeprom(&cur_state);
 
   client.begin(true);
 }
 
-void Msg_state(const String &topicStr, const String &message) {
-  Serial.println("topic = " + topicStr + ", msg = " + message);
+void onMsgCommand( const String &message ){}
+void OnLoad(){}
 
-  String topic = def_path; topic = topic + "/states/";
+void OnCheckState(){
+}
 
+void Msg_t_on( const String &message ){
+  cur_state.ini.t_on = message.toInt( );
+  write_eeprom();
+}
+void Msg_t_off( const String &message ){
+  cur_state.ini.t_off = message.toInt( );
+  write_eeprom();
+}
+
+void Msg_h_on( const String &message ){
+  cur_state.ini.h_on = message.toInt( );
+  write_eeprom();
+}
+void Msg_h_off( const String &message ){
+  cur_state.ini.h_off = message.toInt( );
+  write_eeprom();
+}
+
+void Msg_relays_mode(const String &topic, const String &message) {
   for(int i = 0; i < def_relays; i++) {
-    if(topic + getName(i) == topicStr) {
-      relays[i].state = ( message.toInt() == 1 ? 1 : 0 );
-    }
+    if(topic == "CHICKEN/relays/" + getName(i)) {
+      cur_state.relays[i].mode = message.toInt();
+      if(cur_state.relays[i].mode < 0 || cur_state.relays[i].mode > 2) cur_state.relays[i].mode = 0;
+      write_eeprom();
+      return;
+    }    
   }
 }
 
-void onMsgCommand( const String &message ){}
-void OnLoad(){}
-void OnCheckState(){}
 void onConnection(){
-  client.Subscribe("states/#", Msg_state); 
+  dht22.subscribe( );
+
+  for(int i = 0; i < def_relays; i++) {
+    client.Subscribe("modes/" + getName(i), Msg_relays_mode); 
+  }
+  
+  client.Subscribe("settings/t/on", Msg_t_on); 
+  client.Subscribe("settings/t/off", Msg_t_off); 
+  client.Subscribe("settings/h/on", Msg_h_on); 
+  client.Subscribe("settings/h/off", Msg_h_off); 
 }
 
 void report(int mode ){
   for(int i = 0; i < def_relays; i++) {
-    if (mode == 0 || ( mode == 1 && relays[i].state != digitalRead(pins[i]) ) )  
-      client.Publish("states/" + getName(i), String(relays[i].state));
+    if (mode == 0 || ( mode == 1 && cur_state.relays[i].state != digitalRead(pins[i]) ) )  
+      digitalWrite(pins[i], cur_state.relays[i].state);
+      client.Publish("states/" + getName(i), String(cur_state.relays[i].state));
   }
   client.flag_start = false;
 }
@@ -70,15 +168,45 @@ void report(int mode ){
 void loop() {
   client.loop();
 
+  dht22.loop( );
+  
+  s_dht22_val dht22val = dht22.get_last_value();
+
+//свет
+  switch(cur_state.relays[0].mode){
+    case 1: cur_state.relays[0].state = HIGH; break;
+    case 2: cur_state.relays[0].state = LOW; break;
+  }
+
+//вытяжка
+  switch(cur_state.relays[1].mode){
+    case 1: cur_state.relays[1].state = HIGH; break;
+    case 2: cur_state.relays[1].state = LOW; break;
+    default:
+      if(dht22val.h_value >= cur_state.ini.h_on) {
+        cur_state.relays[1].state = HIGH;
+      } else if(dht22val.h_value < cur_state.ini.h_off) {
+        cur_state.relays[1].state = LOW;
+      }
+    break;
+  }
+  
+//отопление
+  switch(cur_state.relays[2].mode){
+    case 1: cur_state.relays[2].state = HIGH; break;
+    case 2: cur_state.relays[2].state = LOW; break;
+    default:
+      if(dht22val.t_value <= cur_state.ini.t_on) {
+        cur_state.relays[2].state = HIGH;
+      } else if(dht22val.t_value > cur_state.ini.t_off) {
+        cur_state.relays[2].state = LOW;
+      }
+    break;
+  }
+
   if (client.flag_start) { //первый запуск
     report(0); //отправляем все
   } else {
     report(1); //отправляем все
   }  
-
-  for(int i = 0; i < def_relays; i++) {
-    if(relays[i].state != digitalRead(pins[i])) {
-      digitalWrite(pins[i], relays[i].state);
-    }
-  }
 }
