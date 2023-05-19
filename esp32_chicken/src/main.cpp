@@ -14,14 +14,14 @@ int pins[] = {
    14 //отопление
 }; 
 
+mqtt_ini client( 
+  "ESP32_CHICKEN",
+   def_path);
+
 #define DHTPIN              32
 #define DHTTYPE DHT22 
 DHT dht(DHTPIN, DHTTYPE);
 cl_dht22 dht22(&dht, &client, String(def_subpath_dht22), 30000, false);
-
-mqtt_ini client( 
-  "ESP32_CHICKEN",
-   def_path);
 
 struct s_relay { 
   String name;
@@ -52,49 +52,57 @@ String getName(int i) {
   return ret;
 }
 
-void read_eeprom(s_state* state){
+void read_eeprom(s_state* state, boolean debug = true){
   for(int i = 0; i < def_relays; i++) {
     String t = getName(i) + "_mode";
     state->relays[i].mode = preferences.getInt(t.c_str(), 0);
     if(state->relays[i].mode < 0 || state->relays[i].mode > 2) state->relays[i].mode = 0;
+    if(debug) Serial.println("read " + t + " = " + String(state->relays[i].mode));
   }
   
-  state->ini.t_on = preferences.getInt("t_on", 10);
-  state->ini.t_off = preferences.getInt("t_off", 20);
+  state->ini.t_on = preferences.getInt("t_on", 10);  if(debug) Serial.println("read t_on = " + String(state->ini.t_on));
+  state->ini.t_off = preferences.getInt("t_off", 20);  if(debug) Serial.println("read t_off = " + String(state->ini.t_off));
 
-  state->ini.h_on = preferences.getInt("h_on", 60);
-  state->ini.h_off = preferences.getInt("h_off", 40);
+  state->ini.h_on = preferences.getInt("h_on", 10);  if(debug) Serial.println("read h_on = " + String(state->ini.h_on));
+  state->ini.h_off = preferences.getInt("h_off", 20);  if(debug) Serial.println("read h_off = " + String(state->ini.h_off));
 }
 
 void write_eeprom(){
   s_state readed;
-  read_eeprom(&readed);
+  read_eeprom(&readed, false);
 
   for(int i = 0; i < def_relays; i++) {
     if(cur_state.relays[i].mode != readed.relays[i].mode) {
       String t = getName(i) + "_mode";
       preferences.putInt(t.c_str(), cur_state.relays[i].mode);
+      Serial.println("write " + t + " = " + String(cur_state.relays[i].mode));
     }
   }
 
   if(cur_state.ini.t_on != readed.ini.t_on) {
     preferences.putInt("t_on", cur_state.ini.t_on);
+    Serial.println("write t_on = " + String(cur_state.ini.t_on));
   }
   if(cur_state.ini.t_off != readed.ini.t_off) {
     preferences.putInt("t_off", cur_state.ini.t_off);
+    Serial.println("write t_off = " + String(cur_state.ini.t_off));
   }
 
   if(cur_state.ini.h_on != readed.ini.h_on) {
     preferences.putInt("h_on", cur_state.ini.h_on);
+    Serial.println("write h_on = " + String(cur_state.ini.h_on));
   }
   if(cur_state.ini.h_off != readed.ini.h_off) {
     preferences.putInt("h_off", cur_state.ini.h_off);
+    Serial.println("write h_off = " + String(cur_state.ini.h_off));
   }
 }
 
 void setup() {
   Serial.begin(115200);                                         
   Serial.println("");  Serial.println("Start!");
+
+  preferences.begin("settings", false);
 
   dht22.begin();
 
@@ -134,7 +142,7 @@ void Msg_h_off( const String &message ){
 
 void Msg_relays_mode(const String &topic, const String &message) {
   for(int i = 0; i < def_relays; i++) {
-    if(topic == "CHICKEN/relays/" + getName(i)) {
+    if(topic == "CHICKEN/modes/" + getName(i)) {
       cur_state.relays[i].mode = message.toInt();
       if(cur_state.relays[i].mode < 0 || cur_state.relays[i].mode > 2) cur_state.relays[i].mode = 0;
       write_eeprom();
@@ -158,10 +166,22 @@ void onConnection(){
 
 void report(int mode ){
   for(int i = 0; i < def_relays; i++) {
-    if (mode == 0 || ( mode == 1 && cur_state.relays[i].state != digitalRead(pins[i]) ) )  
+    if (mode == 0 || ( mode == 1 && cur_state.relays[i].state != digitalRead(pins[i]) ) )  {
       digitalWrite(pins[i], cur_state.relays[i].state);
       client.Publish("states/" + getName(i), String(cur_state.relays[i].state));
+    }
+    if (mode == 0 )  {
+      client.Publish("modes/" + getName(i), String(cur_state.relays[i].mode));
+    }
   }
+
+  if (mode == 0 )  {
+    client.Publish("settings/h/on", String(cur_state.ini.h_on));
+    client.Publish("settings/h/off", String(cur_state.ini.h_off));
+    client.Publish("settings/t/on", String(cur_state.ini.t_on));
+    client.Publish("settings/t/off", String(cur_state.ini.t_off));
+  }
+
   client.flag_start = false;
 }
 
@@ -183,10 +203,12 @@ void loop() {
     case 1: cur_state.relays[1].state = HIGH; break;
     case 2: cur_state.relays[1].state = LOW; break;
     default:
-      if(dht22val.h_value >= cur_state.ini.h_on) {
-        cur_state.relays[1].state = HIGH;
-      } else if(dht22val.h_value < cur_state.ini.h_off) {
-        cur_state.relays[1].state = LOW;
+      if(dht22val.readed){
+        if(dht22val.h_value >= cur_state.ini.h_on) {
+          cur_state.relays[1].state = HIGH;
+        } else if(dht22val.h_value < cur_state.ini.h_off) {
+          cur_state.relays[1].state = LOW;
+        }
       }
     break;
   }
@@ -196,10 +218,12 @@ void loop() {
     case 1: cur_state.relays[2].state = HIGH; break;
     case 2: cur_state.relays[2].state = LOW; break;
     default:
-      if(dht22val.t_value <= cur_state.ini.t_on) {
-        cur_state.relays[2].state = HIGH;
-      } else if(dht22val.t_value > cur_state.ini.t_off) {
-        cur_state.relays[2].state = LOW;
+      if(dht22val.readed){
+        if(dht22val.t_value <= cur_state.ini.t_on) {
+          cur_state.relays[2].state = HIGH;
+        } else if(dht22val.t_value > cur_state.ini.t_off) {
+          cur_state.relays[2].state = LOW;
+        }
       }
     break;
   }
