@@ -167,6 +167,7 @@ void onConnection(){
 void report(int mode ){
   for(int i = 0; i < def_relays; i++) {
     if (mode == 0 || ( mode == 1 && cur_state.relays[i].state != digitalRead(pins[i]) ) )  {
+
       digitalWrite(pins[i], cur_state.relays[i].state);
       client.Publish("states/" + getName(i), String(cur_state.relays[i].state));
     }
@@ -195,7 +196,7 @@ void loop() {
 //свет
   switch(cur_state.relays[0].mode){
     case 1: cur_state.relays[0].state = HIGH; break;
-    case 2: cur_state.relays[0].state = LOW; break;
+    default: cur_state.relays[0].state = LOW; break;
   }
 
 //вытяжка
@@ -228,9 +229,5 @@ void loop() {
     break;
   }
 
-  if (client.flag_start) { //первый запуск
-    report(0); //отправляем все
-  } else {
-    report(1); //отправляем все
-  }  
+  report((client.flag_start ? 0 : 1)); //отправляем все
 }
