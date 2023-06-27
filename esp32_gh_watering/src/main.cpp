@@ -58,6 +58,10 @@ void report( s_state sState, int mode){
   if (mode == 0 || ( mode == 1 && sState.bed_1.state != cur_state.bed_1.state ) ) {
     client.Publish("bed_1_state", String(sState.bed_1.state));
   }
+
+  if (mode == 0 || ( mode == 1 && sState.pump.state != cur_state.pump.state ) ) {
+    client.Publish("pump_state", String(sState.pump.state));
+  }
   
   cur_state = sState;
   client.flag_start = false;
@@ -65,12 +69,48 @@ void report( s_state sState, int mode){
 
 void OnCheckState(){}
 
+void pump_on() {
+  int state_pump = digitalRead(cur_state.pump.pin);
+  int f3 = digitalRead(cur_state.float_3.pin);
+  if(f3 == HIGH) state_pump = LOW;
+  if(state_pump == HIGH) return;
+  digitalWrite(cur_state.pump.pin, HIGH);
+}
+
+void pump_off() {
+  int state_pump = digitalRead(cur_state.pump.pin);
+  if(state_pump == LOW) return;
+  digitalWrite(cur_state.pump.pin, LOW);
+}
+
+void poliv_on() {
+  int state_poliv = digitalRead(cur_state.bed_1.pin);
+  int f1 = digitalRead(cur_state.float_1.pin);
+  if(f1 == LOW) state_poliv = LOW;
+  if(state_poliv == HIGH) return;
+  digitalWrite(cur_state.bed_1.pin, HIGH);
+}
+
+void poliv_off() {
+  int state_poliv = digitalRead(cur_state.bed_1.pin);
+  if(state_poliv == LOW) return;
+  digitalWrite(cur_state.bed_1.pin, LOW);
+}
+
 void msg_pump_state(const String message){
   cur_state.pump.state = (message.toInt() == 1 ? HIGH : LOW);
+  switch(cur_state.pump.state){
+    case HIGH: pump_on(); break;
+    default: pump_off(); break;
+  }  
 }
 
 void msg_bed_1_state(const String message){
   cur_state.bed_1.state = (message.toInt() == 1 ? HIGH : LOW);
+  switch(cur_state.bed_1.state){
+    case HIGH: poliv_on(); break;
+    default: poliv_off(); break;
+  }  
 }
 
 void onConnection(){
@@ -84,10 +124,18 @@ void check(s_state* state){
   state->float_1.state = digitalRead(state->float_1.pin);
   state->float_2.state = digitalRead(state->float_2.pin);
   state->float_3.state = digitalRead(state->float_3.pin);
-  int state_pump = digitalRead(state->pump.pin);
-  int bad_1_pump = digitalRead(state->bed_1.state);
+  state->pump.state = digitalRead(state->pump.pin);
+  state->bed_1.state = digitalRead(state->bed_1.pin);
 
-  
+  if(state->float_3.state == HIGH) {
+    state->pump.state = LOW;
+  }
+  if(state->float_1.state == LOW) {
+    state->bed_1.state = LOW;
+  }
+
+  digitalWrite(state->pump.pin, state->pump.state);
+  digitalWrite(state->bed_1.pin, state->bed_1.state);
 }
 
 void loop() {
