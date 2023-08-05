@@ -196,7 +196,7 @@ void loop() {
 //свет
   switch(cur_state.relays[0].mode){
     case 1: cur_state.relays[0].state = HIGH; break;
-    default: cur_state.relays[0].state = LOW; break;
+    case 2: cur_state.relays[0].state = LOW; break;
   }
 
 //вытяжка
