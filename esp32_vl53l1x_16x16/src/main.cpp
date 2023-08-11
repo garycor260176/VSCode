@@ -139,6 +139,9 @@ void report(s_state state, int mode ){
   if (mode == 0 || ( mode == 1 && cur_state.any_HIGH != state.any_HIGH ) )  {
     client.Publish("any_HIGH", (state.any_HIGH ? "1" : "0"));
   }
+  if (mode == 0 || ( mode == 1 && cur_state.dir != state.dir ) )  {
+    client.Publish("dir", String(state.dir));
+  }
 
   if(mode == 0){
     client.Publish("settings/ROI_size", String(ROI_state.ROI_size));
