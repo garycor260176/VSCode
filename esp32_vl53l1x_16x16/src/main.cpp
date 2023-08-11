@@ -10,6 +10,7 @@ SFEVL53L1X distanceSensor(Wire);//, SHUTDOWN_PIN, INTERRUPT_PIN);
 struct s_ROI{
   int ROI_size = 8;
   int center[2] = {167, 231}; /* center of the two zones */  
+  int distance;
 };
 int Zone = 0;
 s_ROI ROI_state;
@@ -46,6 +47,7 @@ void read_eeprom(s_ROI* ROI){
   ROI->ROI_size = preferences.getInt("ROIs", 8);  Serial.println("read ROI_size = " + String(ROI->ROI_size));
   ROI->center[0] = preferences.getInt("c0", 137);  Serial.println("read center[0] = " + String(ROI->center[0]));
   ROI->center[1] = preferences.getInt("c1", 231);  Serial.println("read center[1] = " + String(ROI->center[1]));
+  ROI->distance = preferences.getInt("dist", 1500);  Serial.println("read distance = " + String(ROI->distance));
 }
 
 void write_eeprom(){
@@ -65,6 +67,11 @@ void write_eeprom(){
   if(old.center[1] != ROI_state.center[1]) {
     preferences.putInt("c1", ROI_state.center[1]);
     Serial.println("write center[1] = " + String(ROI_state.center[1]));
+  }
+
+  if(old.distance != ROI_state.distance) {
+    preferences.putInt("dist", ROI_state.distance);
+    Serial.println("write distance = " + String(ROI_state.distance));
   }
 }
 
@@ -135,6 +142,7 @@ void report(s_state state, int mode ){
 
   if(mode == 0){
     client.Publish("settings/ROI_size", String(ROI_state.ROI_size));
+    client.Publish("settings/distance", String(ROI_state.distance));
     client.Publish("settings/center0", String(ROI_state.center[0]));
     client.Publish("settings/center1", String(ROI_state.center[1]));
   }
@@ -163,7 +171,7 @@ void loop(void)
 
   switch(Zone){
     case 0:
-      state.zone1.state = (distance <= 1500);
+      state.zone1.state = (distance <= ROI_state.distance);
       if(state.zone1.state) {
         state.zone1.t_up = mil;
       } else {
@@ -172,7 +180,7 @@ void loop(void)
     break;
 
     case 1:
-      state.zone2.state = (distance <= 1500);
+      state.zone2.state = (distance <= ROI_state.distance);
       if(state.zone2.state) {
         state.zone2.t_up = mil;
       } else {
