@@ -169,11 +169,14 @@ void ScanInputs( ){
   raw = 4095 - raw;
   if(raw < 0) raw = 0;
   Peakdelay =  map(raw,0,4095,1,100);
+  Peakdelay = 10;
 
   raw = adc1_get_raw(ADC1_CHANNEL_4);
   raw = 4095 - raw;
   if(raw < 0) raw = 0;
   BRIGHTNESSMARK = map(raw,0,4095,BRIGHTNESSMIN, BRIGHTNESSMAX);
+//!!! потом убрать
+  BRIGHTNESSMARK = 100;
   FastLED.setBrightness(BRIGHTNESSMARK);
 }
 

@@ -8,7 +8,8 @@
 SFEVL53L1X distanceSensor(Wire);//, SHUTDOWN_PIN, INTERRUPT_PIN);
 
 struct s_ROI{
-  int ROI_size = 8;
+  int ROI_size_w = 8;
+  int ROI_size_h = 8;
   int center[2] = {167, 231}; /* center of the two zones */  
   int distance;
 };
@@ -44,7 +45,8 @@ mqtt_ini client(
 Preferences preferences; 
 
 void read_eeprom(s_ROI* ROI){
-  ROI->ROI_size = preferences.getInt("ROIs", 8);  Serial.println("read ROI_size = " + String(ROI->ROI_size));
+  ROI->ROI_size_w = preferences.getInt("ROIs", 8);  Serial.println("read ROI_size_w = " + String(ROI->ROI_size_w));
+  ROI->ROI_size_h = preferences.getInt("ROIsH", 8);  Serial.println("read ROI_size_h = " + String(ROI->ROI_size_h));
   ROI->center[0] = preferences.getInt("c0", 137);  Serial.println("read center[0] = " + String(ROI->center[0]));
   ROI->center[1] = preferences.getInt("c1", 231);  Serial.println("read center[1] = " + String(ROI->center[1]));
   ROI->distance = preferences.getInt("dist", 1500);  Serial.println("read distance = " + String(ROI->distance));
@@ -54,9 +56,14 @@ void write_eeprom(){
   s_ROI old;
   read_eeprom(&old);
 
-  if(old.ROI_size != ROI_state.ROI_size) {
-    preferences.putInt("ROIs", ROI_state.ROI_size);
-    Serial.println("write ROI_size = " + String(ROI_state.ROI_size));
+  if(old.ROI_size_w != ROI_state.ROI_size_w) {
+    preferences.putInt("ROIs", ROI_state.ROI_size_w);
+    Serial.println("write ROI_size_w = " + String(ROI_state.ROI_size_w));
+  }
+
+  if(old.ROI_size_h != ROI_state.ROI_size_h) {
+    preferences.putInt("ROIsH", ROI_state.ROI_size_h);
+    Serial.println("write ROI_size_h = " + String(ROI_state.ROI_size_h));
   }
 
   if(old.center[0] != ROI_state.center[0]) {
@@ -111,23 +118,34 @@ void OnLoad(){}
 
 void OnCheckState(){}
 
-void Msg_ROI_size( const String &message ){
-  ROI_state.ROI_size = message.toInt( );
+void Msg_ROI_size_w( const String &message ){
+  if(ROI_state.ROI_size_w == message.toInt( )) return;
+  ROI_state.ROI_size_w = message.toInt( );
+  write_eeprom();
+}
+
+void Msg_ROI_size_h( const String &message ){
+  if(ROI_state.ROI_size_h == message.toInt( )) return;
+  ROI_state.ROI_size_h = message.toInt( );
   write_eeprom();
 }
 
 void Msg_Zone1( const String &message ){
+  if(ROI_state.center[0] == message.toInt( )) return;
   ROI_state.center[0] = message.toInt();
   write_eeprom();
 }
 
 void Msg_Zone2( const String &message ){
+  if(ROI_state.center[1] == message.toInt( )) return;
   ROI_state.center[1] = message.toInt();
   write_eeprom();
 }
 
+
 void onConnection(){
-  client.Subscribe("settings/ROI_size", Msg_ROI_size); 
+  client.Subscribe("settings/ROI_size", Msg_ROI_size_w); 
+  client.Subscribe("settings/ROI_size_h", Msg_ROI_size_h); 
   client.Subscribe("settings/center0", Msg_Zone1); 
   client.Subscribe("settings/center1", Msg_Zone2); 
 }
@@ -144,7 +162,8 @@ void report(s_state state, int mode ){
   }
 
   if(mode == 0){
-    client.Publish("settings/ROI_size", String(ROI_state.ROI_size));
+    client.Publish("settings/ROI_size", String(ROI_state.ROI_size_w));
+    client.Publish("settings/ROI_size_h", String(ROI_state.ROI_size_h));
     client.Publish("settings/distance", String(ROI_state.distance));
     client.Publish("settings/center0", String(ROI_state.center[0]));
     client.Publish("settings/center1", String(ROI_state.center[1]));
@@ -164,7 +183,9 @@ void loop(void)
 
   uint32_t mil = millis( );
 
-  distanceSensor.setROI(ROI_state.ROI_size, ROI_state.ROI_size, ROI_state.center[Zone]);  // first value: height of the zone, second value: width of the zone
+  state.dir = 0;
+
+  distanceSensor.setROI(ROI_state.ROI_size_h, ROI_state.ROI_size_w, ROI_state.center[Zone]);  // first value: height of the zone, second value: width of the zone
   delay(delay_between_measurements);
   distanceSensor.setTimingBudgetInMs(time_budget_in_ms);
   distanceSensor.startRanging(); //Write configuration bytes to initiate measurement
@@ -228,14 +249,10 @@ void loop(void)
   if(!state.zone1.state && !state.zone2.state) {
     state.zone1 = Clear_time(state.zone1);
     state.zone2 = Clear_time(state.zone2);
-  }
-
-	if(state.zone1.state || state.zone2.state){
+		state.any_HIGH = false;
+  } else {
 		state.any_HIGH = true;
 	}
-	else {
-		state.any_HIGH = false;
-	}  
 
   report(state, (client.flag_start ? 0 : 1)); //отправляем все
 }
