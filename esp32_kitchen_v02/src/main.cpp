@@ -34,8 +34,12 @@ struct s_led{
   boolean state;
 };
 
+#define DISTANCE_MIN 40
+#define DISTANCE_MAX 100
+
 struct s_state {
-  int DISTANCE_PUSH = 80;
+  int DISTANCE_PUSH = DISTANCE_MIN;
+  int DISTANCE_PUSH_MAX = DISTANCE_MAX;
   s_led led;
   s_ws2815 rgb;
   int alarm;
@@ -104,9 +108,13 @@ void setup() {
 }
 
 void read_eeprom(struct s_state* state){
-  state->DISTANCE_PUSH = preferences.getInt("DISTANCE_PUSH", 80);
-  if(state->DISTANCE_PUSH <= 0 || state->DISTANCE_PUSH > 2000) state->DISTANCE_PUSH = 80;
+  state->DISTANCE_PUSH = preferences.getInt("DISTANCE_PUSH", DISTANCE_MIN);
+  if(state->DISTANCE_PUSH <= 0 || state->DISTANCE_PUSH > 2000) state->DISTANCE_PUSH = DISTANCE_MIN;
   Serial.println("read DISTANCE_PUSH = " + String(state->DISTANCE_PUSH));
+
+  state->DISTANCE_PUSH_MAX = preferences.getInt("DIST_PUSHM", DISTANCE_MAX);
+  if(state->DISTANCE_PUSH_MAX <= 0 || state->DISTANCE_PUSH_MAX > 2000) state->DISTANCE_PUSH_MAX = DISTANCE_MAX;
+  Serial.println("read DISTANCE_PUSH_MAX = " + String(state->DISTANCE_PUSH_MAX));
 
 //RGB
   state->rgb.brightness = preferences.getInt("r_br", 50);
@@ -134,9 +142,14 @@ void read_eeprom(struct s_state* state){
 }
 
 void write_eeprom(struct s_state* state){
-  state->DISTANCE_PUSH = preferences.getInt("DISTANCE_PUSH", 80);
-  if(state->DISTANCE_PUSH <= 0 || state->DISTANCE_PUSH > 2000) state->DISTANCE_PUSH = 80;
-  Serial.println("read DISTANCE_PUSH = " + String(state->DISTANCE_PUSH));
+  if(state->DISTANCE_PUSH != cur_state.DISTANCE_PUSH)    {
+    preferences.putInt("DISTANCE_PUSH", state->DISTANCE_PUSH);
+    Serial.println("save DISTANCE_PUSH = " + String(state->DISTANCE_PUSH));
+  }
+  if(state->DISTANCE_PUSH_MAX != cur_state.DISTANCE_PUSH_MAX)    {
+    preferences.putInt("DIST_PUSHM", state->DISTANCE_PUSH_MAX);
+    Serial.println("save DISTANCE_PUSH_NAX = " + String(state->DISTANCE_PUSH_MAX));
+  }
 
 //RGB
   if(state->rgb.brightness != cur_state.rgb.brightness)    {
@@ -354,7 +367,7 @@ void check_btn(struct s_state* state) {
     int dist = getDist( );
     //dist = getFilterMedian(dist);         // медиана
     //dist = getFilterSkip(dist);           // пропускающий фильтр
-    state->btn_state = ( dist <= state->DISTANCE_PUSH ? 1 : 0 );
+    state->btn_state = ( dist >= state->DISTANCE_PUSH && dist <= state->DISTANCE_PUSH_MAX ? 1 : 0 );
     if(state->btn_state != cur_state.btn_state) 
       client.Publish("dist", String(dist));
     t = millis();
