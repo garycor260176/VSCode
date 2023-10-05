@@ -101,7 +101,7 @@ void loop()
   s_state state = cur_state;
 
   radar.read();
-  if(radar.isConnected() && millis() - lastReading > 1000)  //Report every 1000ms
+  if(radar.isConnected() && millis() - lastReading > 500)  //Report every 1000ms
   {
     lastReading = millis();
     state.presenceDetected = radar.presenceDetected() ? 1 : 0;

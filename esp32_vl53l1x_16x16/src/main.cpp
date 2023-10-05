@@ -1,15 +1,13 @@
-﻿#include <Wire.h>
-#include <VL53L1X.h>
+﻿#include <mqtt_ini.h>
+#include <Wire.h>
+#include <Preferences.h>
+#include <cl_vl53l1x.h>
 
-// The number of sensors in your system.
-const uint8_t sensorCount = 2;
+uint16_t dist = 1700;
 
-// The Arduino pin connected to the XSHUT pin of each sensor.
-const uint8_t xshutPins[sensorCount] = { 18, 19 };
-
-VL53L1X sensors[sensorCount];
-boolean states[sensorCount];
+cl_vl53l1x Zones[2];
 int Zone = 0;
+int counter = 0;
 
 void setup()
 {
@@ -17,50 +15,75 @@ void setup()
   Wire.begin();
   Wire.setClock(400000); // use 400 kHz I2C
 
-  // Disable/reset all sensors by driving their XSHUT pins low.
-  for (uint8_t i = 0; i < sensorCount; i++)
-  {
-    pinMode(xshutPins[i], OUTPUT);
-    digitalWrite(xshutPins[i], LOW);
-  }
-
-  // Enable, initialize, and start each sensor, one by one.
-  for (uint8_t i = 0; i < sensorCount; i++)
-  {
-    // Stop driving this sensor's XSHUT low. This should allow the carrier
-    // board to pull it high. (We do NOT want to drive XSHUT high since it is
-    // not level shifted.) Then wait a bit for the sensor to start up.
-    pinMode(xshutPins[i], INPUT);
-    delay(10);
-
-    sensors[i].setTimeout(500);
-    if (!sensors[i].init())
-    {
-      Serial.print("Failed to detect and initialize sensor ");
-      Serial.println(i);
-      while (1);
-    }
-
-    // Each sensor must have its address changed to a unique value other than
-    // the default of 0x29 (except for the last one, which could be left at
-    // the default). To make it simple, we'll just count up from 0x2A.
-    sensors[i].setAddress(0x2A + i);
-    sensors[i].startContinuous(50);
-  }
-
+  Zones[0].begin(18, 0x2A, dist);
+  Zones[1].begin(19, 0x2B, dist);
   Serial.println("setup - done!");
 }
 
+int first = 0;
+int counter_old = 0;
+
 void loop()
 {
-  uint16_t dist = sensors[Zone].read();
-  boolean state = dist < 1700;
-  if(state != states[Zone]) {
-    Serial.println("Zone " + String(Zone) + " (" + String(dist) + "): " + String(states[Zone]) + " -> " + String(state));
-    states[Zone] = state;
+  s_vl53l1x zone1 = Zones[0].getState();
+  s_vl53l1x zone2 = Zones[1].getState();
+  if(!zone1.val && !zone2.val) first = 0;
+  int dir = 0;
+  int counter = counter_old;
+
+  if(Zones[Zone].read()) {
+    zone1 = Zones[0].getState();
+    zone2 = Zones[1].getState();
+
+    if(first == 0) {
+      if(zone1.val && !zone2.val) {
+        first = 1;
+      } else 
+      if(!zone1.val && zone2.val) {
+        first = 2;
+      }
+    }
+
+    if(!zone1.val && !zone2.val && ( zone1.val_last || zone2.val_last)) {
+      switch(first){
+        case 1:
+          if(
+            zone1.t_up <= zone2.t_up &&
+            zone2.t_up <= zone1.t_dn &&
+            zone1.t_dn <= zone2.t_dn
+          ) {
+            dir = 1;
+          }
+        break;
+
+        case 2:
+          if(
+            zone2.t_up <= zone1.t_up &&
+            zone1.t_up <= zone2.t_dn &&
+            zone2.t_dn <= zone1.t_dn
+          ) {
+            dir = 2;
+          }
+        break;
+      }
+    }
+  } 
+
+  switch(dir){
+    case 1: counter++; break;
+    case 2: counter--; break;
   }
-  if (sensors[Zone].timeoutOccurred()) Serial.println(String(Zone) + ": TIMEOUT");
+
+  if(!zone1.val && !zone2.val) {
+    Zones[0].clear();
+    Zones[1].clear();
+	first = 0;
+  }
+
+  if(counter_old != counter) Serial.println(counter);
+
+  counter_old = counter;
 
   Zone++;
-  if(Zone >= sensorCount) Zone = 0;
+  if(Zone >= 2) Zone = 0;
 }

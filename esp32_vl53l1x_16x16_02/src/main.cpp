@@ -96,7 +96,7 @@ void setup(void)
   if (distanceSensor.init() == false)
     Serial.println("Sensor online!");
 
-  client.begin(true);
+  client.begin();
   delay(1000);
 }
 
@@ -181,8 +181,6 @@ void loop(void)
 
   uint16_t distance;
 
-  uint32_t mil = millis( );
-
   state.dir = 0;
 
   distanceSensor.setROI(ROI_state.ROI_size_h, ROI_state.ROI_size_w, ROI_state.center[Zone]);  // first value: height of the zone, second value: width of the zone
@@ -193,66 +191,82 @@ void loop(void)
   distanceSensor.clearInterrupt();
   distanceSensor.stopRanging();
 
+  boolean changed = false;
+
   switch(Zone){
     case 0:
       state.zone1.state = (distance <= ROI_state.distance);
+      changed = (state.zone1.state != cur_state.zone1.state);
       if(state.zone1.state) {
-        state.zone1.t_up = mil;
+        state.zone1.t_up = millis();
       } else {
-        state.zone1.t_down = mil;
+        state.zone1.t_down = millis();
       }
     break;
 
     case 1:
       state.zone2.state = (distance <= ROI_state.distance);
+      changed = (state.zone2.state != cur_state.zone2.state);
       if(state.zone2.state) {
-        state.zone2.t_up = mil;
+        state.zone2.t_up = millis();
       } else {
-        state.zone2.t_down = mil;
+        state.zone2.t_down = millis();
       }
     break;
   }
 
-  Zone++;
-  if(Zone > 1) Zone = 0;
+  if(!cur_state.zone1.state && !cur_state.zone2.state) first = 0;
+  state.any_HIGH = (state.zone1.state || state.zone2.state);
 
-	if(cur_state.zone1.state != state.zone1.state || cur_state.zone2.state != state.zone2.state){
-    if(state.zone1.state && state.zone1.t_up > 0 && !state.zone2.state && state.zone2.t_up == 0){
-      first = 1;
-    } else if(state.zone2.state && state.zone2.t_up > 0 && !state.zone1.state && state.zone1.t_up == 0){
-      first = 2;
+  if(changed) {
+    if(first == 0) {
+        if(state.zone1.state && !state.zone2.state) {
+          first = 1;
+        } else 
+        if(!state.zone1.state && state.zone2.state) {
+          first = 2;
+        }
     }
 
-    if(!state.zone1.state && !state.zone2.state) {
-      if(	first == 1 &&
-          state.zone1.t_down > 0 &&
-          state.zone2.t_down >= state.zone2.t_up && state.zone2.t_down >= state.zone1.t_down && state.zone2.t_down >= state.zone1.t_up &&
-          state.zone1.t_down >= state.zone1.t_up && state.zone1.t_down >= state.zone2.t_up &&
-          state.zone2.t_up >= state.zone1.t_up ) {
-        state.dir = 1;
-        state.Counter++;
-      } else if( first == 2 &&
-                state.zone1.t_down > 0 &&
-                state.zone1.t_down >= state.zone1.t_up && state.zone1.t_down >= state.zone2.t_down && state.zone1.t_down >= state.zone2.t_up &&
-                state.zone2.t_down >= state.zone2.t_up && state.zone2.t_down >= state.zone1.t_up &&
-                state.zone1.t_up >= state.zone2.t_up) {
-        state.dir = 2;
-        state.Counter--;
-        if(state.Counter < 0) state.Counter = 0;
+    if(!state.zone1.state && !state.zone2.state && ( cur_state.zone1.state || cur_state.zone2.state)) {
+      switch(first){
+        case 1:
+          if(
+            state.zone1.t_up <= state.zone2.t_up &&
+            state.zone2.t_up <= state.zone1.t_down &&
+            state.zone1.t_down <= state.zone2.t_down
+          ) {
+            state.dir = 1;
+          }
+        break;
+
+        case 2:
+          if(
+            state.zone2.t_up <= state.zone1.t_up &&
+            state.zone1.t_up <= state.zone2.t_down &&
+            state.zone2.t_down <= state.zone1.t_down
+          ) {
+            state.dir = 2;
+          }
+        break;
       }
-      state.zone1 = Clear_time(state.zone1);
-      state.zone2 = Clear_time(state.zone2);
-      first = 0;
     }
   }
 
+  switch(state.dir){
+    case 1: state.Counter++; break;
+    case 2: state.Counter--; if(state.Counter < 0) state.Counter = 0; break;
+  }
+
   if(!state.zone1.state && !state.zone2.state) {
+    first = 0;
     state.zone1 = Clear_time(state.zone1);
     state.zone2 = Clear_time(state.zone2);
 		state.any_HIGH = false;
-  } else {
-		state.any_HIGH = true;
 	}
+
+  Zone++;
+  if(Zone > 1) Zone = 0;
 
   report(state, (client.flag_start ? 0 : 1)); //отправляем все
 }
