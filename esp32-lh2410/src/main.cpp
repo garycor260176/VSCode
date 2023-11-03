@@ -46,18 +46,23 @@ s_state cur_state;
 
 void report_ini(s_settings ini, int mode);
 
+#define INTERVAL_MS 500
+#define INTERVAL_MS_MIN 100
+#define INTERVAL_LD 500
+#define INTERVAL_LD_MIN 100
+
 s_settings read_eeprom(){
   s_settings ret;
 
-  ret.pin_MS_interval = preferences.getInt("int_ms", 5);
-  if(ret.pin_MS_interval < 500){
-    ret.pin_MS_interval = 500;
+  ret.pin_MS_interval = preferences.getInt("int_ms", INTERVAL_MS);
+  if(ret.pin_MS_interval < INTERVAL_MS_MIN){
+    ret.pin_MS_interval = INTERVAL_MS_MIN;
   }
   Serial.println("read pin_MS_interval = " + String(ret.pin_MS_interval));
 
-  ret.pin_LD_interval = preferences.getInt("int_ld", 500);
-  if(ret.pin_LD_interval < 500){
-    ret.pin_LD_interval = 500;
+  ret.pin_LD_interval = preferences.getInt("int_ld", INTERVAL_LD);
+  if(ret.pin_LD_interval < INTERVAL_LD_MIN){
+    ret.pin_LD_interval = INTERVAL_LD_MIN;
   }
   Serial.println("read pin_LD_interval = " + String(ret.pin_LD_interval));
 
@@ -66,11 +71,11 @@ s_settings read_eeprom(){
 
 s_settings write_eeprom(s_settings ini){
   s_settings ret = ini;
-  if(ret.pin_MS_interval < 500){
-    ret.pin_MS_interval = 500;
+  if(ret.pin_MS_interval < INTERVAL_MS_MIN){
+    ret.pin_MS_interval = INTERVAL_MS_MIN;
   }
-  if(ret.pin_LD_interval < 500){
-    ret.pin_LD_interval = 500;
+  if(ret.pin_LD_interval < INTERVAL_LD_MIN){
+    ret.pin_LD_interval = INTERVAL_LD_MIN;
   }
 
   if(cur_state.ini.pin_MS_interval != ret.pin_MS_interval)    {

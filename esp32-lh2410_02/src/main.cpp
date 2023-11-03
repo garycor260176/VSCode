@@ -87,7 +87,8 @@ s_settings write_eeprom(s_settings ini){
 void setup(void)
 {
   MONITOR_SERIAL.begin(115200); //Feedback over Serial Monitor
-  
+  MONITOR_SERIAL.println("Start...");    
+
   pinMode(PIN_MS, INPUT);
   pinMode(PIN_IO, INPUT);
 

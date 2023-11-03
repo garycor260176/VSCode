@@ -7,7 +7,7 @@ ld2410 radar;
 uint32_t lastReading = 0;
 bool radarConnected = false;
 
-#define def_path "LD2410C_03"
+#define def_path "LD2410C_04"
 #define MONITOR_SERIAL Serial
 #define RADAR_SERIAL Serial1
 #define RADAR_RX_PIN 18
@@ -18,7 +18,7 @@ bool radarConnected = false;
 Preferences preferences; //хранение текущего состояния
 
 mqtt_ini client( 
-  "ESP32_LD2410C_03",     // Client name that uniquely identify your device
+  "ESP32_LD2410C_04",     // Client name that uniquely identify your device
    def_path);
 
 struct s_settings{
