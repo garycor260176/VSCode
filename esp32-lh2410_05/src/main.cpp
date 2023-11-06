@@ -1,18 +1,19 @@
 #include <arduino.h>
 #include <mqtt_ini.h>
 #include <cl_ld2410c.h>
+#include <Preferences.h>
 
 ld2410 radar;
 
-#define def_path "LD2410C_01"
+#define def_path "LD2410C_05"
 
 Preferences preferences; //хранение текущего состояния
 
 mqtt_ini client( 
-  "ESP32_LD2410C_01",     // Client name that uniquely identify your device
+  "ESP32_LD2410C_05",     // Client name that uniquely identify your device
    def_path);
 
-cl_ld2410c ld2410c(&radar, &preferences, &client, "", &Serial1, "int_ld", INTERVAL_LD, 256000, SERIAL_8N1, 18, 19, 23);
+cl_ld2410c ld2410c(&radar, &preferences, &client, "", &Serial1);
 
 void setup(void)
 {
