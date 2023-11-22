@@ -34,6 +34,7 @@ struct s_ini{
   int t_off;
   int h_on;
   int h_off;
+  int t_max;
 };
 
 struct s_state{
@@ -62,6 +63,7 @@ void read_eeprom(s_state* state, boolean debug = true){
   
   state->ini.t_on = preferences.getInt("t_on", 10);  if(debug) Serial.println("read t_on = " + String(state->ini.t_on));
   state->ini.t_off = preferences.getInt("t_off", 20);  if(debug) Serial.println("read t_off = " + String(state->ini.t_off));
+  state->ini.t_max = preferences.getInt("t_max", 20);  if(debug) Serial.println("read t_max = " + String(state->ini.t_max));
 
   state->ini.h_on = preferences.getInt("h_on", 10);  if(debug) Serial.println("read h_on = " + String(state->ini.h_on));
   state->ini.h_off = preferences.getInt("h_off", 20);  if(debug) Serial.println("read h_off = " + String(state->ini.h_off));
@@ -86,6 +88,10 @@ void write_eeprom(){
   if(cur_state.ini.t_off != readed.ini.t_off) {
     preferences.putInt("t_off", cur_state.ini.t_off);
     Serial.println("write t_off = " + String(cur_state.ini.t_off));
+  }
+  if(cur_state.ini.t_max != readed.ini.t_max) {
+    preferences.putInt("t_max", cur_state.ini.t_max);
+    Serial.println("write t_max = " + String(cur_state.ini.t_max));
   }
 
   if(cur_state.ini.h_on != readed.ini.h_on) {
@@ -130,6 +136,10 @@ void Msg_t_off( const String &message ){
   cur_state.ini.t_off = message.toInt( );
   write_eeprom();
 }
+void Msg_t_max( const String &message ){
+  cur_state.ini.t_max = message.toInt( );
+  write_eeprom();
+}
 
 void Msg_h_on( const String &message ){
   cur_state.ini.h_on = message.toInt( );
@@ -160,6 +170,7 @@ void onConnection(){
   
   client.Subscribe("settings/t/on", Msg_t_on); 
   client.Subscribe("settings/t/off", Msg_t_off); 
+  client.Subscribe("settings/t/max", Msg_t_max); 
   client.Subscribe("settings/h/on", Msg_h_on); 
   client.Subscribe("settings/h/off", Msg_h_off); 
 }
@@ -181,6 +192,7 @@ void report(int mode ){
     client.Publish("settings/h/off", String(cur_state.ini.h_off));
     client.Publish("settings/t/on", String(cur_state.ini.t_on));
     client.Publish("settings/t/off", String(cur_state.ini.t_off));
+    client.Publish("settings/t/max", String(cur_state.ini.t_max));
   }
 
   client.flag_start = false;
@@ -216,7 +228,13 @@ void loop() {
   
 //отопление
   switch(cur_state.relays[2].mode){
-    case 1: cur_state.relays[2].state = HIGH; break;
+    case 1: 
+      if(dht22val.t_value > cur_state.ini.t_max) {
+        cur_state.relays[2].state = LOW; 
+      } else {
+        cur_state.relays[2].state = HIGH; 
+      }
+    break;
     case 2: cur_state.relays[2].state = LOW; break;
     default:
       if(dht22val.readed){
