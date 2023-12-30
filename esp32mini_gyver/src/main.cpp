@@ -8,7 +8,6 @@
 #include <mqtt_ini.h>
 #include <FastLED.h>
 #include <Preferences.h>
-#include <ArduinoJson.h>
 
 #define def_path "L_gyver"
 #define PIN_LED   23
@@ -39,11 +38,6 @@ struct s_mode {
 
 boolean started = false;
 
-uint32_t b_timer;
-boolean b_started_change = false;
-int b_old;
-int b_value;
-
 mqtt_ini client( 
   "L_gyver",     // Client name that uniquely identify your device
    def_path);
@@ -59,12 +53,15 @@ struct s_def_effect {
 };
 
 struct s_settings {
-  uint8_t brightness; // = 100;
-  boolean dimmered = true;;
-  int stepDimmer = 1;
-  int delayDimStep = 5;
+  int brightness;
 
-  int numEffect = 0;
+  int dimmered; 
+  
+  int stepDimmer;
+
+  int delayDimStep;
+
+  int numEffect;
 
   s_def_effect e0;
 };
@@ -72,18 +69,17 @@ struct s_settings {
 struct s_state {
   s_settings ini;
 
-  int onoff = 0;
+  int onoff;
+  int old_onoff;
+
   int cur_brightness;
   int  dir = 0;
   uint32_t dimmerTime;
-
   int oldEffect;
 };
 
 s_state cur_state;
 s_settings eeprom;
-
-//button btn_mode(PIN_MODE); // указываем пин
 
 void report( s_state sState, int mode );
 
@@ -130,7 +126,7 @@ void read_eeprom(){
   }
   Serial.println("read delayDimStep = " + String(cur_state.ini.delayDimStep));
 
-  cur_state.ini.dimmered = preferences.getBool("dimmered", true);
+  cur_state.ini.dimmered = preferences.getInt("dimmered", 1);
   Serial.println("read dimmered = " + String(cur_state.ini.dimmered));
 
   String str;
@@ -145,7 +141,6 @@ void read_eeprom(){
 
   eeprom = cur_state.ini;
 }
-
 void write_eeprom(){
   if(cur_state.ini.e0.r != eeprom.e0.r)    {
     preferences.putInt("e0_r", cur_state.ini.e0.r);
@@ -183,7 +178,7 @@ void write_eeprom(){
   }
 
   if(cur_state.ini.dimmered != eeprom.dimmered)    {
-    preferences.putBool("dimmered", cur_state.ini.dimmered);
+    preferences.putInt("dimmered", cur_state.ini.dimmered);
     Serial.println("save dimmered = " + String(cur_state.ini.dimmered));
   }
 
@@ -206,7 +201,6 @@ void write_eeprom(){
       Serial.println("save modes[" + String(i) + "].speed = " + String(modes[i].speed));
     }
   }  
-
   eeprom = cur_state.ini;
 }
 
@@ -214,132 +208,76 @@ void setup() {
   Serial.begin(115200);                                         // Скорость обмена данными с компьютером
   Serial.println("");  Serial.println("Start!");
 
-  b_value = cur_state.ini.brightness;
-
   preferences.begin("settings", false);
 
   read_eeprom();
-  cur_state.onoff = 1;
+  cur_state.old_onoff = cur_state.onoff = 1;
 
   FastLED.addLeds<WS2812B, PIN_LED, GRB>(leds, NUM_LEDS);  // GRB ordering is assumed
   if (CURRENT_LIMIT > 0) FastLED.setMaxPowerInVoltsAndMilliamps(5, CURRENT_LIMIT);
   FastLED.setBrightness(0);
   FastLED.show();
 
-  client.begin(false);
+  client.begin(true);
 }
 
 void onMsgCommand( const String &message ){
 
 }
 
-String Settings2String( s_settings State ) {
-  String ret = "";
-  DynamicJsonDocument doc(1024);
-
-  doc["brightness"] = State.brightness;
-  doc["dimmered"] = State.dimmered;
-  doc["stepDimmer"] = State.stepDimmer;
-  doc["delayDimStep"] = State.delayDimStep;
-  doc["numEffect"] = State.numEffect;
-  
-  doc["e0"][0] = State.e0.r;
-  doc["e0"][1] = State.e0.g;
-  doc["e0"][2] = State.e0.b;
-
-  doc["mode"][0] = modes[State.numEffect].speed;
-  doc["mode"][1] = modes[State.numEffect].scale;
-
-  serializeJson(doc, ret);
-  return ret;
-}
-
-String Mode2String( s_mode mode ) {
-  String ret = "";
-  DynamicJsonDocument doc(1024);
-
-  doc["speed"] = mode.speed;
-  doc["scale"] = mode.scale;
-
-  serializeJson(doc, ret);
-  return ret;
-}
-
-s_settings String2Settings(String msg){
-  s_settings ret = cur_state.ini;
-  if(msg.length( ) == 0) return ret;
-
-  DynamicJsonDocument doc(1024);
-  deserializeJson(doc, msg);  
-
-  ret.brightness = doc["brightness"];
-  ret.dimmered = doc["dimmered"];
-  ret.stepDimmer = doc["stepDimmer"];
-  ret.delayDimStep = doc["delayDimStep"];
-  ret.numEffect = doc["numEffect"];
-  if(ret.numEffect < 0 || ret.numEffect >= NUM_EFFECTS) {
-    ret.numEffect = 0;
-  }
-  ret.e0.r = doc["e0"][0];
-  ret.e0.g = doc["e0"][1];
-  ret.e0.b = doc["e0"][2];
-  
-  return ret;
-}
-
-void String2Mode(String msg){
-  if(msg.length( ) == 0) return;
-
-  DynamicJsonDocument doc(1024);
-  deserializeJson(doc, msg);  
-
-  modes[cur_state.ini.numEffect].speed = doc["speed"];
-  modes[cur_state.ini.numEffect].scale = doc["scale"];
-}
-
-void reportMode(s_mode mode) {
-    client.Publish("mode", Mode2String( mode));
-}
-
 void report( s_state s_State, int mode ) {
   s_state sState = s_State;
 
-  if(mode == 0 || 
-    ( mode == 1 &&
-      ( sState.ini.brightness != cur_state.ini.brightness ||
-       sState.ini.dimmered != cur_state.ini.dimmered ||
-       sState.ini.stepDimmer != cur_state.ini.stepDimmer ||
-       sState.ini.delayDimStep != cur_state.ini.delayDimStep ||
-       sState.ini.numEffect != cur_state.ini.numEffect ||
-       modes[sState.ini.numEffect].scale != modes[sState.ini.numEffect].old_scale ||
-       modes[sState.ini.numEffect].speed != modes[sState.ini.numEffect].old_speed
-      )
-    )
-  ){
-    client.Publish("settings", Settings2String( sState.ini));
-    reportMode(modes[sState.ini.numEffect]);
+  if(mode == 0 || ( mode == 1 && sState.onoff != sState.old_onoff )){
+    client.Publish("onoff", String(cur_state.onoff));
   }
 
-  if(mode == 0 || 
-    ( mode == 1 && sState.onoff != cur_state.onoff )
-  ){
-    client.Publish("onoff", String( sState.onoff ));
+  if(mode == 0 || ( mode == 1 && sState.ini.brightness != eeprom.brightness )){
+    client.Publish("settings/brightness", String(cur_state.ini.brightness));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.dimmered != eeprom.dimmered )){
+    client.Publish("settings/dimmered", String(cur_state.ini.dimmered));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.stepDimmer != eeprom.stepDimmer )){
+    client.Publish("settings/stepDimmer", String(cur_state.ini.stepDimmer));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.delayDimStep != eeprom.delayDimStep )){
+    client.Publish("settings/delayDimStep", String(cur_state.ini.delayDimStep));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.numEffect != eeprom.numEffect )){
+    client.Publish("settings/numEffect", String(cur_state.ini.numEffect));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.e0.r != eeprom.e0.r )){
+    client.Publish("settings/color/r", String(cur_state.ini.e0.r));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.e0.g != eeprom.e0.g )){
+    client.Publish("settings/color/g", String(cur_state.ini.e0.g));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.e0.b != eeprom.e0.b )){
+    client.Publish("settings/color/b", String(cur_state.ini.e0.b));
+  }
+  boolean changedNum = sState.ini.numEffect != eeprom.numEffect;
+  if(mode == 0 || ( mode == 1 && ( modes[sState.ini.numEffect].scale != modes[sState.ini.numEffect].old_scale || changedNum))){
+    client.Publish("settings/scale", String(modes[sState.ini.numEffect].scale));
+  }
+  if(mode == 0 || ( mode == 1 && ( modes[sState.ini.numEffect].speed != modes[sState.ini.numEffect].old_speed || changedNum))){
+    client.Publish("settings/speed", String(modes[sState.ini.numEffect].speed));
   }
 
-  if(mode == 0 || 
-    ( mode == 1 && sState.dir != cur_state.dir )
-  ){
-    client.Publish("dir", String( sState.dir ));
-  }
+  write_eeprom( );
 
   cur_state = sState;
+  cur_state.ini = eeprom;
+  cur_state.old_onoff = cur_state.onoff;
+  modes[sState.ini.numEffect].old_scale = modes[sState.ini.numEffect].scale;
+  modes[sState.ini.numEffect].old_speed = modes[sState.ini.numEffect].speed;
+
   client.flag_start = false;
 }
 
-uint64_t bt;
-
 s_state Read_state( ) {
   s_state ret = cur_state;
+
   return ret;
 }
 
@@ -436,10 +374,6 @@ s_state OnOff(s_state state) {
 void OnCheckState(){
   s_state state = Read_state( );
 
-  if(state.ini.numEffect < 0 || state.ini.numEffect >= NUM_EFFECTS) {
-    state.ini.numEffect = 0;
-  }  
-
   state = OnOff(state);
 
   if (client.flag_start) { //первый запуск
@@ -449,35 +383,108 @@ void OnCheckState(){
   }
 }
 
-void Msg_settings( const String &message ){
-  int numEffect = cur_state.ini.numEffect;
-  s_settings ini = ini = String2Settings(message);
-  if(ini.e0.r != cur_state.ini.e0.r || ini.e0.g != cur_state.ini.e0.g || ini.e0.b != cur_state.ini.e0.b ) {
-    ini.e0.done = false;
-  }
-
-  cur_state.ini = ini;
-  write_eeprom();  
-  if(numEffect != cur_state.ini.numEffect) {
-      reportMode(modes[cur_state.ini.numEffect]);
-  }
-}
-
-void Msg_settings_mode( const String &message ){
-  String2Mode(message);
-  reportMode(modes[cur_state.ini.numEffect]);
-  write_eeprom();  
-}
-
 void Msg_onoff( const String &message ){
   cur_state.onoff = message.toInt( );
+  if(cur_state.onoff < 0 || cur_state.onoff > 1) cur_state.onoff = 0;
+  if(cur_state.old_onoff == cur_state.onoff) return;
+  cur_state.old_onoff = cur_state.onoff;
   Serial.println("onoff = " + String(cur_state.onoff));
 }
-
+void Msg_brightness( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(cur_state.ini.brightness == val) return;
+  cur_state.ini.brightness = val;
+  Serial.println("brightness = " + String(cur_state.ini.brightness));
+}
+void Msg_dimmered( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 1) val = 1;
+  if(cur_state.ini.dimmered == val) return;
+  cur_state.ini.dimmered = val;
+  Serial.println("dimmered = " + String(cur_state.ini.dimmered));
+}
+void Msg_stepDimmer( const String &message ){
+  int val = message.toInt( );
+  if(val < 1 ) val = 1;
+  if(val > 255) val = 255;
+  if(cur_state.ini.stepDimmer == val) return;
+  cur_state.ini.stepDimmer = val;
+  Serial.println("stepDimmer = " + String(cur_state.ini.stepDimmer));
+}
+void Msg_delayDimStep( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(cur_state.ini.delayDimStep == val) return;
+  cur_state.ini.delayDimStep = val;
+  Serial.println("delayDimStep = " + String(cur_state.ini.delayDimStep));
+}
+void Msg_numEffect( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val >= NUM_EFFECTS) val = NUM_EFFECTS - 1;
+  if(cur_state.ini.numEffect == val) return;
+  cur_state.ini.numEffect = val;
+  Serial.println("numEffect = " + String(cur_state.ini.numEffect));
+}
+void Msg_r( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(cur_state.ini.e0.r == val) return;
+  cur_state.ini.e0.r = val;
+  Serial.println("r = " + String(cur_state.ini.e0.r));
+}
+void Msg_g( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(cur_state.ini.e0.g == val) return;
+  cur_state.ini.e0.g = val;
+  Serial.println("g = " + String(cur_state.ini.e0.g));
+}
+void Msg_b( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(cur_state.ini.e0.b == val) return;
+  cur_state.ini.e0.b = val;
+  Serial.println("b = " + String(cur_state.ini.e0.b));
+}
+void Msg_settings_scale( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(modes[cur_state.ini.numEffect].scale == val) return;
+  modes[cur_state.ini.numEffect].scale = val;
+  Serial.println("scale = " + String(modes[cur_state.ini.numEffect].scale));
+}
+void Msg_settings_speed( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 255) val = 255;
+  if(modes[cur_state.ini.numEffect].speed == val) return;
+  modes[cur_state.ini.numEffect].speed = val;
+  Serial.println("speed = " + String(modes[cur_state.ini.numEffect].speed));
+}
 void onConnection(){
-  client.Subscribe("settings", Msg_settings); 
-  client.Subscribe("mode", Msg_settings_mode); 
   client.Subscribe("onoff", Msg_onoff); 
+
+  client.Subscribe("settings/brightness", Msg_brightness); 
+  client.Subscribe("settings/dimmered", Msg_dimmered); 
+  client.Subscribe("settings/stepDimmer", Msg_stepDimmer); 
+  client.Subscribe("settings/delayDimStep", Msg_delayDimStep); 
+  client.Subscribe("settings/numEffect", Msg_numEffect); 
+  client.Subscribe("settings/color/r", Msg_r); 
+  client.Subscribe("settings/color/g", Msg_g); 
+  client.Subscribe("settings/color/b", Msg_b); 
+
+  client.Subscribe("onoff", Msg_onoff); 
+
+  client.Subscribe("settings/scale", Msg_settings_scale); 
+  client.Subscribe("settings/speed", Msg_settings_speed); 
 }
 
 void OnLoad(){
