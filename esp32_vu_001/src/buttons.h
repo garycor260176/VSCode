@@ -8,22 +8,25 @@ class button {
       _pin = pin;
       pinMode(_pin, INPUT_PULLUP);
     }
+    void begin() {
+      //pinMode(_pin, INPUT);
+    }
     bool click() {
-        int ret = false;
-
-        bool btnState = digitalRead(_pin);
-        if(btnState == HIGH) {
-            _flag = true;
-            _tmr = millis();
-        } else {
-            if(_flag) {
-                ret = true;
-            }
-            _flag = false;
-            _tmr = 0;
-        }
-
-        return ret;
+      bool btnState = digitalRead(_pin);
+      if (!btnState && !_flag && millis() - _tmr >= 100) {
+        _flag = true;
+        _tmr = millis();
+        return true;
+      }
+      if (!btnState && _flag && millis() - _tmr >= 500) {
+        _tmr = millis ();
+        return true;
+      }
+      if (btnState && _flag && millis() - _tmr > 500) {
+        _flag = false;
+        _tmr = millis();
+      }
+      return false;
     }
   private:
     byte _pin;

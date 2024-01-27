@@ -64,6 +64,9 @@ struct s_settings {
   int numEffect;
 
   s_def_effect e0;
+
+  int demo_mode;
+  uint32_t demo_mode_time;
 };
 
 struct s_state {
@@ -77,6 +80,8 @@ struct s_state {
   uint32_t dimmerTime;
   int oldEffect;
 };
+
+uint32_t last_change_mode;
 
 s_state cur_state;
 s_settings eeprom;
@@ -127,7 +132,18 @@ void read_eeprom(){
   Serial.println("read delayDimStep = " + String(cur_state.ini.delayDimStep));
 
   cur_state.ini.dimmered = preferences.getInt("dimmered", 1);
+  if(cur_state.ini.dimmered < 0) cur_state.ini.dimmered = 0;
+  if(cur_state.ini.dimmered > 1) cur_state.ini.dimmered = 1;
   Serial.println("read dimmered = " + String(cur_state.ini.dimmered));
+
+  cur_state.ini.demo_mode = preferences.getInt("demo_mode", 1);
+  if(cur_state.ini.demo_mode < 0) cur_state.ini.demo_mode = 0;
+  if(cur_state.ini.demo_mode > 1) cur_state.ini.demo_mode = 1;
+  Serial.println("read demo_mode = " + String(cur_state.ini.demo_mode));
+
+  cur_state.ini.demo_mode_time = preferences.getUInt("demo_modet", 10);
+  if(cur_state.ini.demo_mode_time <= 0) cur_state.ini.demo_mode_time = 10;
+  Serial.println("read demo_modet = " + String(cur_state.ini.demo_mode_time));
 
   String str;
   for(int i = 0; i < NUM_EFFECTS; i++) {
@@ -182,6 +198,16 @@ void write_eeprom(){
     Serial.println("save dimmered = " + String(cur_state.ini.dimmered));
   }
 
+  if(cur_state.ini.demo_mode != eeprom.demo_mode)    {
+    preferences.putInt("demo_mode", cur_state.ini.demo_mode);
+    Serial.println("save demo_mode = " + String(cur_state.ini.demo_mode));
+  }
+
+  if(cur_state.ini.demo_mode_time != eeprom.demo_mode_time)    {
+    preferences.putUInt("demo_modet", cur_state.ini.demo_mode_time);
+    Serial.println("save demo_modet = " + String(cur_state.ini.demo_mode_time));
+  }
+
   String str;
   for(int i = 0; i < NUM_EFFECTS; i++) {
     if(modes[i].scale != modes[i].old_scale) {
@@ -229,32 +255,38 @@ void report( s_state s_State, int mode ) {
   s_state sState = s_State;
 
   if(mode == 0 || ( mode == 1 && sState.onoff != sState.old_onoff )){
-    client.Publish("onoff", String(cur_state.onoff));
+    client.Publish("onoff", String(sState.onoff));
   }
 
   if(mode == 0 || ( mode == 1 && sState.ini.brightness != eeprom.brightness )){
-    client.Publish("settings/brightness", String(cur_state.ini.brightness));
+    client.Publish("settings/brightness", String(sState.ini.brightness));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.dimmered != eeprom.dimmered )){
-    client.Publish("settings/dimmered", String(cur_state.ini.dimmered));
+    client.Publish("settings/dimmered", String(sState.ini.dimmered));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.demo_mode != eeprom.demo_mode )){
+    client.Publish("settings/demo_mode", String(sState.ini.demo_mode));
+  }
+  if(mode == 0 || ( mode == 1 && sState.ini.demo_mode_time != eeprom.demo_mode_time )){
+    client.Publish("settings/demo_mode_time", String(sState.ini.demo_mode_time));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.stepDimmer != eeprom.stepDimmer )){
-    client.Publish("settings/stepDimmer", String(cur_state.ini.stepDimmer));
+    client.Publish("settings/stepDimmer", String(sState.ini.stepDimmer));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.delayDimStep != eeprom.delayDimStep )){
-    client.Publish("settings/delayDimStep", String(cur_state.ini.delayDimStep));
+    client.Publish("settings/delayDimStep", String(sState.ini.delayDimStep));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.numEffect != eeprom.numEffect )){
-    client.Publish("settings/numEffect", String(cur_state.ini.numEffect));
+    client.Publish("settings/numEffect", String(sState.ini.numEffect));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.e0.r != eeprom.e0.r )){
-    client.Publish("settings/color/r", String(cur_state.ini.e0.r));
+    client.Publish("settings/color/r", String(sState.ini.e0.r));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.e0.g != eeprom.e0.g )){
-    client.Publish("settings/color/g", String(cur_state.ini.e0.g));
+    client.Publish("settings/color/g", String(sState.ini.e0.g));
   }
   if(mode == 0 || ( mode == 1 && sState.ini.e0.b != eeprom.e0.b )){
-    client.Publish("settings/color/b", String(cur_state.ini.e0.b));
+    client.Publish("settings/color/b", String(sState.ini.e0.b));
   }
   boolean changedNum = sState.ini.numEffect != eeprom.numEffect;
   if(mode == 0 || ( mode == 1 && ( modes[sState.ini.numEffect].scale != modes[sState.ini.numEffect].old_scale || changedNum))){
@@ -264,9 +296,10 @@ void report( s_state s_State, int mode ) {
     client.Publish("settings/speed", String(modes[sState.ini.numEffect].speed));
   }
 
+  cur_state = sState;
+
   write_eeprom( );
 
-  cur_state = sState;
   cur_state.ini = eeprom;
   cur_state.old_onoff = cur_state.onoff;
   modes[sState.ini.numEffect].old_scale = modes[sState.ini.numEffect].scale;
@@ -329,6 +362,22 @@ s_state OnOff(s_state state) {
     ret.dir = 0;
   }
 
+  if(ret.onoff != ret.old_onoff) {
+    last_change_mode = millis();
+  }
+
+  if(ret.onoff == 1) {
+    if(ret.ini.demo_mode == 1) {
+      if(millis() - last_change_mode > ret.ini.demo_mode_time * 1000) {
+        ret.ini.numEffect++;
+        if(ret.ini.numEffect >= NUM_EFFECTS) ret.ini.numEffect = 0;
+        last_change_mode = millis();
+      }
+    } else {
+      last_change_mode = millis( );
+    }
+  }
+
   if(ret.cur_brightness > 0) {
     if(ret.oldEffect != ret.ini.numEffect) {
       loadingFlag = true;
@@ -341,7 +390,7 @@ s_state OnOff(s_state state) {
   if(ret.dir != 0) {
     int br = ret.cur_brightness;
 
-    if(ret.ini.dimmered) {
+    if(ret.ini.dimmered == 1) {
       if(millis() - ret.dimmerTime > ret.ini.delayDimStep) {
         if(ret.dir == 1) {
           br += ret.ini.stepDimmer;
@@ -469,11 +518,28 @@ void Msg_settings_speed( const String &message ){
   modes[cur_state.ini.numEffect].speed = val;
   Serial.println("speed = " + String(modes[cur_state.ini.numEffect].speed));
 }
+void Msg_demo_mode( const String &message ){
+  int val = message.toInt( );
+  if(val < 0 ) val = 0;
+  if(val > 1) val = 1;
+  if(cur_state.ini.demo_mode == val) return;
+  cur_state.ini.demo_mode = val;
+  Serial.println("demo_mode = " + String(cur_state.ini.demo_mode));
+}
+void Msg_demo_mode_time( const String &message ){
+  int val = message.toInt( );
+  if(val <= 0 ) val = 10;
+  if(cur_state.ini.demo_mode_time == val) return;
+  cur_state.ini.demo_mode_time = val;
+  Serial.println("demo_mode_time = " + String(cur_state.ini.demo_mode_time));
+}
 void onConnection(){
   client.Subscribe("onoff", Msg_onoff); 
 
   client.Subscribe("settings/brightness", Msg_brightness); 
   client.Subscribe("settings/dimmered", Msg_dimmered); 
+  client.Subscribe("settings/demo_mode", Msg_demo_mode); 
+  client.Subscribe("settings/demo_mode_time", Msg_demo_mode_time); 
   client.Subscribe("settings/stepDimmer", Msg_stepDimmer); 
   client.Subscribe("settings/delayDimStep", Msg_delayDimStep); 
   client.Subscribe("settings/numEffect", Msg_numEffect); 

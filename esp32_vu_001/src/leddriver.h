@@ -3,13 +3,15 @@
 #include "Settings.h"
 
 #define TOP            (kMatrixHeight - 0)         // Don't allow the bars to go offscreen
+#define WIDTH 16
+#define HEIGHT 16
 
 #define CHIPSET         WS2812B                     // LED strip type
 #define COLOR_ORDER     GRB                         // If colours look wrong, play with this
 #define LED_VOLTS       5                           // Usually 5 or 12
 #define MAX_MILLIAMPS   2000                        // Careful with the amount of power here if running off USB port
-const uint8_t kMatrixWidth = 16; //32;//128;                    // Matrix width --> number of columns in your led matrix
-const uint8_t kMatrixHeight = 16; //32;//64;                   // Matrix height --> number of leds per column
+const uint8_t kMatrixWidth = WIDTH; //32;//128;                    // Matrix width --> number of columns in your led matrix
+const uint8_t kMatrixHeight = HEIGHT; //32;//64;                   // Matrix height --> number of leds per column
 #define PANE_WIDTH kMatrixWidth
 
 #define NUM_LEDS   (kMatrixWidth * kMatrixHeight)   // Total number of LEDs

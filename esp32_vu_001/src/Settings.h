@@ -4,8 +4,8 @@
 
 #define ADC_INPUT       ADC1_CHANNEL_0
 #define PIN_MODE        18
-#define PIN_BAND        23
-#define LED_PIN         19                          // LED strip data
+#define PIN_BAND        19
+#define LED_PIN         23                          // LED strip data
 
 #define ARRAYSIZE(a)    (sizeof(a)/sizeof(a[0]))
 int16_t samples[SAMPLEBLOCK];
@@ -34,7 +34,7 @@ uint8_t colorTimer = 0;
 #define ChangingBar_Color   y * (255 / kMatrixHeight) + colorTimer, 255, 255
 #define BRIGHTNESSMAX       255                     // Max brightness of the leds...carefull...to bright might draw to much amps!
 int BRIGHTNESSMARK= 50;                            // Default brightnetss, however, overruled by the Brightness potmeter
-#define BRIGHTNESSMIN       5                              // Min brightness
+#define BRIGHTNESSMIN       0                              // Min brightness
 
 #define TriBar_Color_Top      0 , 255, 255    // Red CHSV
 #define TriBar_Color_Bottom   95 , 255, 255   // Green CHSV
