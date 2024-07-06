@@ -459,11 +459,13 @@ void loop() {
     oldVU = gVU; 
     if(gVU>DemoTreshold)LastDoNothingTime = millis(); // if there is signal in any off the bands[>2] then no demo mode
 
-    for(int j=0;j<numBands;j++){
-      if (CalibrationType==1) FreqBins[j] *= BandCalibration_Pink(numBands)[j];
-      else if (CalibrationType==2) FreqBins[j] *= BandCalibration_White(numBands)[j];
-      else if (CalibrationType==3) FreqBins[j] *= BandCalibration_Brown(numBands)[j];
+    if(CalibrationType != 0) {
+      for(int j=0;j<numBands;j++){
+        if (CalibrationType==1) FreqBins[j] *= BandCalibration_Pink(numBands)[j];
+        else if (CalibrationType==2) FreqBins[j] *= BandCalibration_White(numBands)[j];
+        else if (CalibrationType==3) FreqBins[j] *= BandCalibration_Brown(numBands)[j];
 
+      }
     }
 
   //############ Step 6: Averaging and making it all fit on screen 
@@ -474,7 +476,7 @@ void loop() {
         allBandsPeak = FreqBins[i];
       }
     }   
-    if (allBandsPeak < 1)allBandsPeak = 1;
+    if (allBandsPeak < 1) allBandsPeak = 1;
     //  The followinf picks allBandsPeak if it's gone up.  If it's gone down, it "averages" it by faking a running average of GAIN_DAMPEN past peaks
     allBandsPeak = max(allBandsPeak, ((lastAllBandsPeak * (GAIN_DAMPEN-1)) + allBandsPeak) / GAIN_DAMPEN);  // Dampen rate of change a little bit on way down
     lastAllBandsPeak = allBandsPeak;
