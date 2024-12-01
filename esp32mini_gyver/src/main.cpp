@@ -79,6 +79,9 @@ struct s_state {
   int  dir = 0;
   uint32_t dimmerTime;
   int oldEffect;
+
+  int alarm = 0;
+  boolean alarmed = false;
 };
 
 uint32_t last_change_mode;
@@ -336,8 +339,23 @@ s_state drawEffect(s_state state) {
   return ret;
 }
 
+void colorsRoutine(){
+  hue += 10;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CHSV(hue, 255, 255);
+  }
+  FastLED.show();
+}
+
 s_state OnOff(s_state state) {
   s_state ret = state;
+
+  if(ret.alarm > 0) {
+    ret.alarmed = true;
+    colorsRoutine();
+    return ret;
+  }
+  cur_state.alarmed = false;
 
   if(ret.onoff == 1) {
       if(ret.cur_brightness < ret.ini.brightness) {
@@ -533,6 +551,37 @@ void Msg_demo_mode_time( const String &message ){
   cur_state.ini.demo_mode_time = val;
   Serial.println("demo_mode_time = " + String(cur_state.ini.demo_mode_time));
 }
+
+void SetColor( uint8_t r, uint8_t g, uint8_t b){
+  for (int i = 0 ; i < NUM_LEDS; i++ )
+  {
+    leds[i].setRGB( r, g, b);
+  }
+}
+
+void Msg_alarm( const String &message ){
+  int alarm = cur_state.alarm;
+  cur_state.alarm = message.toInt();
+  cur_state.alarm = (cur_state.alarm == 1);
+
+  if(alarm == cur_state.alarm) return;
+
+  if(cur_state.alarm > 0){
+    switch(cur_state.alarm) {
+      case 1:
+        FastLED.clear(true);
+        SetColor(255, 0, 0);
+        FastLED.setBrightness(255);
+        FastLED.show();  
+      break;
+    }
+  } else {
+      FastLED.clear(true);
+      FastLED.setBrightness(cur_state.cur_brightness);
+      FastLED.show();  
+  }
+}
+
 void onConnection(){
   client.Subscribe("onoff", Msg_onoff); 
 
@@ -551,6 +600,8 @@ void onConnection(){
 
   client.Subscribe("settings/scale", Msg_settings_scale); 
   client.Subscribe("settings/speed", Msg_settings_speed); 
+
+  client.Subscribe("alarm", Msg_alarm); 
 }
 
 void OnLoad(){

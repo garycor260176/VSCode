@@ -298,20 +298,32 @@ void OnCheckState(){
     }
   } else {
     if(flagSinceLastBtn){
-      if(millis( ) - TimeSinceLastBtn >= 5000){
+      int rel = false;
+      boolean led = false;
+
+      if(millis( ) - TimeSinceLastBtn >= 5000)          rel = true;
+      else {
+        if(state.relay.state == LOW)                    rel = true;
+        else                                            led = true;
+      } 
+
+      if(rel) {
         if(state.relay.state == LOW) {
           state.relay.state = HIGH;
         } else {
           state.relay.state = LOW;
         }
-        digitalWrite(cur_state.relay.pin, state.relay.state);
-      } else {
+        digitalWrite(state.relay.pin, state.relay.state);
+      }
+
+      if(led) {
         if( state.led.flag_on ){
           state = Off( state );
         } else {
           state = On( state );
         }
       }
+
       TimeSinceLastBtn = 0;
     }
     flagSinceLastBtn = false;
