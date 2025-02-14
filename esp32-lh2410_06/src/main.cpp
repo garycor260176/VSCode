@@ -18,7 +18,7 @@ cl_ld2410c ld2410c(&radar, &preferences, &client, "", &Serial1);
 void setup(void)
 {
   Serial.begin(115200); //Feedback over Serial Monitor
-  Serial.println("");  Serial.println("Start!");
+  Serial.println("");  Serial.println("Start " + String(def_path) + "!");
   
   preferences.begin("settings", false);
   ld2410c.begin();
