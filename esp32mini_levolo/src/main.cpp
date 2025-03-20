@@ -16,6 +16,15 @@ Preferences preferences;
 
 mqtt_ini *client;
 
+enum MODES{
+  AUTO = 0,
+  ON = 1,
+  OFF = 2,
+  AUTO_ON = 3,
+  AUTO_OFF = 4,
+  UNKNOWN = 99,
+};
+
 int pins[MAXNUMBUTTONS] = {
 5,
 23,
@@ -50,7 +59,7 @@ class Button {
 
   private:
     int pin;
-    int mode;
+    int mode = UNKNOWN;
     int num;
     String name;
 
@@ -60,6 +69,11 @@ class Button {
     int read_mode();
     int write_mode(int);
     void setColor(uint8_t g, uint8_t r, uint8_t b);
+    void blinkColor();
+
+    uint16_t delaybri = 100;
+    uint32_t TimeDelaybri = 0;
+    int step = 10;
 };
 
 void Button::loop(){
@@ -83,6 +97,40 @@ void Button::loop(){
       TimeSinceLastBtn = 0;
     }
     flagSinceLastBtn = false;
+  }
+
+  switch(mode){
+    case AUTO: 
+    case AUTO_ON: 
+    case AUTO_OFF: blinkColor();           break;
+    case ON:       setColor(255, 0, 0);    break;
+    case OFF:      setColor(0, 255, 0);    break;
+    case UNKNOWN:  setColor(255, 255, 0);    break;
+    break;
+  }
+}
+
+void Button::blinkColor(){
+  if(millis() - TimeDelaybri > delaybri) {
+    TimeDelaybri = millis();
+
+    int color;
+
+    switch(mode){
+      case AUTO_ON:  color = leds[num].g;      break;
+      case AUTO_OFF: color = leds[num].r;      break;
+      default:       color = leds[num].b;      break;
+    }
+    color += step;
+    if(color > 255 || color < 0) { 
+      step = - step;
+    }
+    color = color + step;
+    switch(mode){
+      case AUTO_ON:  setColor(color, 0, 0);    break;
+      case AUTO_OFF: setColor(0, color, 0);    break;
+      default:       setColor(0, 0, color);    break;
+    }
   }
 }
 
@@ -112,21 +160,22 @@ void Button::setMode(int _mode){
 }
 
 int Button::read_mode(){
-  int ret = preferences.getInt(name.c_str(), 0);
+/*  int ret = preferences.getInt(name.c_str(), 0);
   if(ret < 0) ret = 0;
   if(ret > 2) ret = 2;
   Serial.println("eeprom readed: " + name + " = " + String(ret));
-  return ret;
+  return ret;*/
+  return mode;
 }
 
 int Button::write_mode(int _mode){
   int ret = _mode;
-  if(ret < 0) ret = 0;
+/*  if(ret < 0) ret = 0;
   if(ret > 2) ret = 2;
   if(ret != mode) {
     preferences.putInt(name.c_str(), ret);
     Serial.println("eeprom writed: " + name + " = " + String(ret));
-  }
+  }*/
   return ret;
 }
 
@@ -135,7 +184,7 @@ Button::Button(int _pin, int _num){
   num = _num;
   name = "B" + String(num);
   pinMode(pin, INPUT);
-  mode = read_mode();
+  mode = UNKNOWN; // read_mode();
   setMode(mode);
 }
 
@@ -274,7 +323,7 @@ void setup() {
     "SWITCH01",
      def_path);
 
-  client->begin(true);
+  client->begin(false);
 }
 
 void loop() {
