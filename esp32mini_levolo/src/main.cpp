@@ -35,6 +35,8 @@ int pins[MAXNUMBUTTONS] = {
 struct stru_state{
   int brightness;
   int AutoSeconds;
+  int delaybri;
+  int step;
 };
 
 stru_state curState;
@@ -49,6 +51,10 @@ stru_state write_eeprom(stru_state newState);
 void createButtons();
 void setBrightness(int brgth);
 
+boolean b_dir;
+uint8_t b_color = 255;
+uint32_t TimeDelaybri = 0;
+
 //***
 class Button {
   public:
@@ -61,6 +67,7 @@ class Button {
     int pin;
     int mode = UNKNOWN;
     int num;
+    boolean longPress;
     String name;
 
     uint32_t TimeSinceLastBtn = 0;
@@ -70,73 +77,60 @@ class Button {
     int write_mode(int);
     void setColor(uint8_t g, uint8_t r, uint8_t b);
     void blinkColor();
-
-    uint16_t delaybri = 100;
-    uint32_t TimeDelaybri = 0;
-    int step = 10;
 };
 
 void Button::loop(){
   String _name = name + "/pressed";
-
+  uint32_t secs = curState.AutoSeconds * 1000;
   int state = digitalRead(pin);
+
+  longPress = false;
   if(state == HIGH){
     if(!flagSinceLastBtn){
       flagSinceLastBtn = true;
       TimeSinceLastBtn = millis( );
+    } else {
+      if(millis( ) - TimeSinceLastBtn >= secs) {
+        longPress = true;
+      }
     }
   } else {
     if(flagSinceLastBtn) {
-      uint32_t secs = curState.AutoSeconds * 1000;
-
       if(millis( ) - TimeSinceLastBtn >= secs) {
-        client->Publish(_name.c_str(), String(2));
+        client->Publish(_name.c_str(), String(OFF));
       } else {
-        client->Publish(_name.c_str(), String(1));
+        client->Publish(_name.c_str(), String(ON));
       } 
       TimeSinceLastBtn = 0;
     }
     flagSinceLastBtn = false;
   }
 
-  switch(mode){
-    case AUTO: 
-    case AUTO_ON: 
-    case AUTO_OFF: blinkColor();           break;
-    case ON:       setColor(255, 0, 0);    break;
-    case OFF:      setColor(0, 255, 0);    break;
-    case UNKNOWN:  setColor(255, 255, 0);    break;
-    break;
+  if(longPress) {
+    setColor(130, 255, 0);    
+  } else {
+    switch(mode){
+      case AUTO: 
+      case AUTO_ON: 
+      case AUTO_OFF: blinkColor();           break;
+      case ON:       setColor(255, 0, 0);    break;
+      case OFF:      setColor(0, 255, 0);    break;
+      case UNKNOWN:  setColor(255, 255, 0);    break;
+      break;
+    }
   }
 }
 
 void Button::blinkColor(){
-  if(millis() - TimeDelaybri > delaybri) {
-    TimeDelaybri = millis();
-
-    int color;
-
-    switch(mode){
-      case AUTO_ON:  color = leds[num].g;      break;
-      case AUTO_OFF: color = leds[num].r;      break;
-      default:       color = leds[num].b;      break;
-    }
-    color += step;
-    if(color > 255 || color < 0) { 
-      step = - step;
-    }
-    color = color + step;
-    switch(mode){
-      case AUTO_ON:  setColor(color, 0, 0);    break;
-      case AUTO_OFF: setColor(0, color, 0);    break;
-      default:       setColor(0, 0, color);    break;
-    }
+  switch(mode){
+    case AUTO_ON:  setColor(b_color, 0, 0);    break;
+    case AUTO_OFF: setColor(0, b_color, 0);    break;
+    default:       setColor(0, 0, b_color);    break;
   }
 }
 
 void Button::setColor(uint8_t g, uint8_t r, uint8_t b){
   leds[num].setRGB( r, g, b);
-  FastLED.show();
 }
 
 String Button::getName(){
@@ -152,30 +146,14 @@ void Button::setMode(int _mode){
       client->Publish(_name.c_str(), String(mode));
     }
   }
-  switch(mode){
-    case 1:  setColor(255, 0, 0); break;
-    case 2:  setColor(0, 255, 0); break;
-    default: setColor(0, 0, 255); break;
-  }
 }
 
 int Button::read_mode(){
-/*  int ret = preferences.getInt(name.c_str(), 0);
-  if(ret < 0) ret = 0;
-  if(ret > 2) ret = 2;
-  Serial.println("eeprom readed: " + name + " = " + String(ret));
-  return ret;*/
   return mode;
 }
 
 int Button::write_mode(int _mode){
   int ret = _mode;
-/*  if(ret < 0) ret = 0;
-  if(ret > 2) ret = 2;
-  if(ret != mode) {
-    preferences.putInt(name.c_str(), ret);
-    Serial.println("eeprom writed: " + name + " = " + String(ret));
-  }*/
   return ret;
 }
 
@@ -203,6 +181,16 @@ stru_state read_eeprom(){
   if(ret.AutoSeconds > 10) ret.AutoSeconds = 10;
   Serial.println("eeprom readed: autosec = " + String(ret.AutoSeconds));
 
+  ret.delaybri = preferences.getInt("delaybri", 100);
+  if(ret.delaybri <= 0) ret.delaybri = 100;
+  if(ret.delaybri > 1000) ret.delaybri = 1000;
+  Serial.println("eeprom readed: delaybri = " + String(ret.delaybri));
+
+  ret.step = preferences.getInt("step", 10);
+  if(ret.step < 0) ret.step = 10;
+  if(ret.step > 255) ret.step = 255;
+  Serial.println("eeprom readed: step = " + String(ret.step));
+
   return ret;
 }
 
@@ -223,6 +211,19 @@ stru_state write_eeprom(stru_state newState){
     Serial.println("eeprom writed: autosec = " + String(ret.AutoSeconds));
   }
 
+  if(ret.delaybri <= 0) ret.delaybri = 100;
+  if(ret.delaybri > 1000) ret.delaybri = 1000;
+  if(ret.delaybri != curState.delaybri) {
+    preferences.putInt("delaybri", ret.delaybri);
+    Serial.println("eeprom writed: delaybri = " + String(ret.delaybri));
+  }
+
+  if(ret.step <= 0) ret.step = 10;
+  if(ret.step > 255) ret.step = 255;
+  if(ret.step != curState.step) {
+    preferences.putInt("step", ret.step);
+    Serial.println("eeprom writed: step = " + String(ret.step));
+  }
   return ret;
 }
 
@@ -237,6 +238,13 @@ void report(stru_state newState, int mode){
 
   if (mode == 0 || ( mode == 1 && newState.AutoSeconds != curState.AutoSeconds ) ) {
     client->Publish("settings/AutoSeconds", String(newState.AutoSeconds));
+  }
+
+  if (mode == 0 || ( mode == 1 && newState.delaybri != curState.delaybri ) ) {
+    client->Publish("settings/delaybri", String(newState.delaybri));
+  }
+  if (mode == 0 || ( mode == 1 && newState.step != curState.step ) ) {
+    client->Publish("settings/step", String(newState.step));
   }
 
   curState = newState;
@@ -268,6 +276,20 @@ void Msg_AutoSeconds(const String &message){
   report(newState, 1);
 }
 
+void Msg_step(const String &message){
+  stru_state newState = curState;
+  newState.step = message.toInt();
+  newState = write_eeprom(newState);
+  report(newState, 1);
+}
+
+void Msg_delaybri(const String &message){
+  stru_state newState = curState;
+  newState.delaybri = message.toInt();
+  newState = write_eeprom(newState);
+  report(newState, 1);
+}
+
 void Msg_btn0Mode(const String &message){
   btns[0]->setMode(message.toInt());
 }
@@ -285,6 +307,8 @@ void onConnection()
 {
   client->Subscribe("settings/brightness", Msg_brightness); 
   client->Subscribe("settings/AutoSeconds", Msg_AutoSeconds); 
+  client->Subscribe("settings/delaybri", Msg_delaybri); 
+  client->Subscribe("settings/step", Msg_step); 
   client->Subscribe(btns[0]->getName( ) + "/mode", Msg_btn0Mode); 
   client->Subscribe(btns[1]->getName( ) + "/mode", Msg_btn1Mode); 
   client->Subscribe(btns[2]->getName( ) + "/mode", Msg_btn2Mode); 
@@ -311,13 +335,13 @@ void setup() {
   Serial.println("Start...");
 
   curState = read_eeprom();
-
   createButtons();
 
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUMLEDS);
   if (CURRENT_LIMIT > 0) FastLED.setMaxPowerInVoltsAndMilliamps(5, CURRENT_LIMIT);
   FastLED.clear();
   setBrightness(curState.brightness);
+  FastLED.show();
 
   client = new mqtt_ini( 
     "SWITCH01",
@@ -332,4 +356,16 @@ void loop() {
   for(int i=0; i<MAXNUMBUTTONS; i++){
     btns[i]->loop();
   }
+
+  if(millis() - TimeDelaybri > curState.delaybri) {
+    TimeDelaybri = millis();
+    int color = b_color;
+
+    color += (b_dir ? -curState.step : curState.step);
+    if(color > 255) { color = 255; b_dir = true; }
+    if(color < 0)   { color = 0; b_dir = false; }
+    color += (b_dir ? -curState.step : curState.step);
+    b_color = color;
+  }
+  FastLED.show();
 }
