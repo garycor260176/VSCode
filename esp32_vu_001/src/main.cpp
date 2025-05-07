@@ -1,4 +1,4 @@
-#include <mqtt_ini.h>
+#include <arduino.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <arduinoFFT.h>
@@ -14,10 +14,12 @@
 #include "screensaver.h"
 #include <Preferences.h>
 
+/*
 #define def_path "VU"
 mqtt_ini client( 
   "VU",     // Client name that uniquely identify your device
    def_path);
+*/
 
 int skip=true;
 unsigned long newTime;
@@ -98,13 +100,15 @@ void setup() {
 
   SetupLEDSTRIP();
 
-  client.begin(false);
+  //client.begin(false);
 }
 
+/*
 void onMsgCommand( const String &message ){}
 void OnCheckState(){}
 void onConnection(){}
 void OnLoad(){}
+*/
 
 // BucketFrequency
 //
@@ -469,7 +473,7 @@ void loop() {
 
   FastLED.show();
 
-  client.loop();
+  //client.loop();
 }
 
 uint32_t effTimer;
