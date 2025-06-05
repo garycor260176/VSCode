@@ -516,7 +516,12 @@ void colorsRoutine(){
   FastLED.show();
 }
 
+int AlarmMode;
 void alarm(){
+  if(!cur_state.led.flag_on) { 
+    AlarmMode = cur_state.settings.mode;
+    cur_state.settings.mode = 1;
+  }
   colorsRoutine();
 }
 
@@ -526,6 +531,7 @@ void loop() {
   if(cur_state.alarm) {
     alarm();
   } else if(cur_state.led.flag_on){
+    cur_state.settings.mode = AlarmMode;
     switch (cur_state.settings.mode_pic) {
       case 1:
         new_rainbow_loop();
